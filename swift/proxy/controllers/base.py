@@ -145,6 +145,11 @@ def headers_to_account_info(headers, status_int=HTTP_OK):
         'container_count': headers.get('x-account-container-count'),
         'total_object_count': headers.get('x-account-object-count'),
         'bytes': headers.get('x-account-bytes-used'),
+        'cors': {
+            'allow_origin': meta.get('access-control-allow-origin'),
+            'expose_headers': meta.get('access-control-expose-headers'),
+            'max_age': meta.get('access-control-max-age')
+        },
         'meta': meta,
         'sysmeta': sysmeta
     }
@@ -189,6 +194,37 @@ def headers_to_object_info(headers, status_int=HTTP_OK):
     return info
 
 
+def cors_allowed(controller, app, req, req_origin):
+    """
+    Validate CORS following cluster, account and container configuration
+    """
+
+    env = getattr(req, 'environ', {})
+
+    account_info = \
+        get_account_info(env, app)
+
+    cors_info_account = account_info.get('cors', {})
+
+    try:
+        container_info = \
+            controller.container_info(controller.account_name,
+                                      controller.container_name, req)
+        cors_info_container = container_info.get('cors', {})
+
+        #Merge rules between Account and Container
+        cors_info = cors_info_account.copy()
+        cors_info.update(cors_info_container)
+
+    except AttributeError:
+        # This should only happen for requests to the Account.
+        cors_info = cors_info_account.copy()
+
+    if not controller.is_origin_allowed(cors_info, req_origin):
+        return False, cors_info
+    return True, cors_info
+
+
 def cors_validation(func):
     """
     Decorator to check if the request is a CORS request and if so, if it's
@@ -208,16 +244,15 @@ def cors_validation(func):
         req_origin = req.headers.get('Origin', None)
         if req_origin:
             # Yes, this is a CORS request so test if the origin is allowed
-            container_info = \
-                controller.container_info(controller.account_name,
-                                          controller.container_name, req)
-            cors_info = container_info.get('cors', {})
+            allowed_request, cors_info = cors_allowed(controller,
+                                                      controller.app,
+                                                      req, req_origin)
 
             # Call through to the decorated method
             resp = func(*a, **kw)
 
             if controller.app.strict_cors_mode and \
-                    not controller.is_origin_allowed(cors_info, req_origin):
+                    not allowed_request:
                 return resp
 
             # Expose,
@@ -234,7 +269,8 @@ def cors_validation(func):
                     'x-timestamp', 'x-trans-id']
                 for header in resp.headers:
                     if header.startswith('X-Container-Meta') or \
-                            header.startswith('X-Object-Meta'):
+                            header.startswith('X-Object-Meta') or \
+                            header.startswith('X-Account-Meta'):
                         expose_headers.append(header.lower())
                 if cors_info.get('expose_headers'):
                     expose_headers.extend(
@@ -1282,8 +1318,11 @@ class Controller(object):
                 [a.strip()
                  for a in cors_info['allow_origin'].split(' ')
                  if a.strip()])
-        if self.app.cors_allow_origin:
+        if self.app.cors_allow_origin and \
+                not self.app.cors_allow_origin_override:
             allowed_origins.update(self.app.cors_allow_origin)
+        elif self.app.cors_allow_origin_override:
+            allowed_origins = set(self.app.cors_allow_origin)
         return origin in allowed_origins or '*' in allowed_origins
 
     @public
@@ -1304,19 +1343,11 @@ class Controller(object):
             return resp
 
         # This is a CORS preflight request so check it's allowed
-        try:
-            container_info = \
-                self.container_info(self.account_name,
-                                    self.container_name, req)
-        except AttributeError:
-            # This should only happen for requests to the Account. A future
-            # change could allow CORS requests to the Account level as well.
-            return resp
-
-        cors = container_info.get('cors', {})
+        allowed_request, cors = cors_allowed(self, self.app, req,
+                                             req_origin_value)
 
         # If the CORS origin isn't allowed return a 401
-        if not self.is_origin_allowed(cors, req_origin_value) or (
+        if not allowed_request or (
                 req.headers.get('Access-Control-Request-Method') not in
                 self.allowed_methods):
             resp.status = HTTP_UNAUTHORIZED

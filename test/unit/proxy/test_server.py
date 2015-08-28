@@ -425,6 +425,11 @@ class TestController(unittest.TestCase):
                               'container_count': '12345',
                               'total_object_count': None,
                               'bytes': None,
+                              'cors': {
+                                  'allow_origin': None,
+                                  'expose_headers': None,
+                                  'max_age': None
+                              },
                               'meta': {},
                               'sysmeta': {}}
             self.assertEquals(container_info,
@@ -452,6 +457,11 @@ class TestController(unittest.TestCase):
                             'container_count': None,  # internally keep None
                             'total_object_count': None,
                             'bytes': None,
+                            'cors': {
+                                'allow_origin': None,
+                                'expose_headers': None,
+                                'max_age': None
+                            },
                             'meta': {},
                             'sysmeta': {}}
             self.assertEquals(account_info,
@@ -4840,6 +4850,16 @@ class TestObjectController(unittest.TestCase):
             controller = proxy_server.ObjectController(self.app, 'a',
                                                        'c', 'o.jpg')
 
+            def my_empty_account_info(*args):
+                return {
+                    'cors': {
+                        'allow_origin': None,
+                        'max_age': '999'
+                    }
+                }
+
+            proxy_base.get_account_info = my_empty_account_info
+
             def my_empty_container_info(*args):
                 return {}
             controller.container_info = my_empty_container_info
@@ -6079,6 +6099,16 @@ class TestContainerController(unittest.TestCase):
         with save_globals():
             controller = proxy_server.ContainerController(self.app, 'a', 'c')
 
+            def my_empty_account_info(*args):
+                return {
+                    'cors': {
+                        'allow_origin': None,
+                        'max_age': '999',
+                    }
+                }
+
+            proxy_base.get_account_info = my_empty_account_info
+
             def my_empty_container_info(*args):
                 return {}
             controller.container_info = my_empty_container_info
@@ -6454,6 +6484,17 @@ class TestAccountController(unittest.TestCase):
             # Access-Control-Request-Method headers)
             self.app.allow_account_management = False
             controller = proxy_server.AccountController(self.app, 'account')
+
+            def my_account_info(*args):
+                return {
+                    'cors': {
+                        'allow_origin': 'http://foo.com',
+                        'max_age': '999',
+                    }
+                }
+
+            proxy_base.get_account_info = my_account_info
+
             req = Request.blank(
                 '/v1/account', {'REQUEST_METHOD': 'OPTIONS'},
                 headers={'Origin': 'http://foo.com',

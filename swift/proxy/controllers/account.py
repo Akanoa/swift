@@ -23,7 +23,8 @@ from swift.common.utils import public
 from swift.common.constraints import check_metadata
 from swift.common import constraints
 from swift.common.http import HTTP_NOT_FOUND, HTTP_GONE
-from swift.proxy.controllers.base import Controller, clear_info_cache
+from swift.proxy.controllers.base import Controller, clear_info_cache, \
+    cors_validation
 from swift.common.swob import HTTPBadRequest, HTTPMethodNotAllowed
 from swift.common.request_helpers import get_sys_meta_prefix
 
@@ -49,6 +50,7 @@ class AccountController(Controller):
                 resp.headers[extname] = format_acl(
                     version=2, acl_dict=acl_dict)
 
+    @cors_validation
     def GETorHEAD(self, req):
         """Handler for HTTP GET/HEAD requests."""
         if len(self.account_name) > constraints.MAX_ACCOUNT_NAME_LENGTH:
@@ -76,6 +78,7 @@ class AccountController(Controller):
         return resp
 
     @public
+    @cors_validation
     def PUT(self, req):
         """HTTP PUT request handler."""
         if not self.app.allow_account_management:
@@ -102,6 +105,7 @@ class AccountController(Controller):
         return resp
 
     @public
+    @cors_validation
     def POST(self, req):
         """HTTP POST request handler."""
         if len(self.account_name) > constraints.MAX_ACCOUNT_NAME_LENGTH:
@@ -129,6 +133,7 @@ class AccountController(Controller):
         return resp
 
     @public
+    @cors_validation
     def DELETE(self, req):
         """HTTP DELETE request handler."""
         # Extra safety in case someone typos a query string for an
