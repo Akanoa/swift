@@ -4946,6 +4946,7 @@ class TestObjectController(unittest.TestCase):
                     }
                 }
             controller.container_info = my_container_info_wildcard
+            controller.app.cors_allow_origin = ['', ]
             req = Request.blank(
                 '/v1/a/c/o.jpg',
                 {'REQUEST_METHOD': 'OPTIONS'},
@@ -6095,6 +6096,90 @@ class TestContainerController(unittest.TestCase):
                 controller.OPTIONS(req)
                 self.assertTrue(count[0] < 11)
 
+    def test_cors_allowed(self):
+        with save_globals():
+            controller = proxy_server.ContainerController(self.app, 'a', 'c')
+            self.app.cors_allow_origin_override = False
+            self.app.cors_allow_origin = ['', ]
+
+            def my_empty_account_info(*args):
+                return {
+                    'cors': {
+                        'allow_origin': None,
+                        'max_age': '999',
+                    }
+                }
+
+            proxy_base.get_account_info = my_empty_account_info
+
+            def my_container_info(*args):
+                return {
+                    'cors': {
+                        'allow_origin': 'https://foo.bar',
+                        'max_age': '999',
+                    }
+                }
+            controller.container_info = my_container_info
+
+            req = Request.blank('/v1/a/c', {'Request Method': 'GET'})
+
+            req_origin = 'https://foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertTrue(result)
+            self.assertEquals(cors_info, {'allow_origin': 'https://foo.bar',
+                                          'max_age': '999'})
+
+            req_origin = 'http://no-foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertFalse(result)
+            self.assertEquals(cors_info, {'allow_origin': 'https://foo.bar',
+                                          'max_age': '999'})
+
+            #check merging with cluster configuration without overriding
+            self.app.cors_allow_origin = ['http://cluster.foo.bar', ]
+
+            req_origin = 'https://foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertTrue(result)
+            self.assertEquals(cors_info,
+                              {'allow_origin': 'https://foo.bar \
+http://cluster.foo.bar', 'max_age': '999'})
+
+            req_origin = 'http://no-foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertFalse(result)
+            self.assertEquals(cors_info, {'allow_origin': 'https://foo.bar \
+http://cluster.foo.bar', 'max_age': '999'})
+
+            #check merging with cluster configuration with overriding
+            self.app.cors_allow_origin = ['http://cluster.foo.bar', ]
+            self.app.cors_allow_origin_override = True
+
+            req_origin = 'https://foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertFalse(result)
+            self.assertEquals(cors_info,
+                              {'allow_origin': 'http://cluster.foo.bar',
+                              'max_age': '999'})
+
+            req_origin = 'http://cluster.foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertTrue(result)
+            self.assertEquals(cors_info,
+                              {'allow_origin': 'http://cluster.foo.bar',
+                               'max_age': '999'})
+
+            req_origin = 'http://no-foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertFalse(result)
+
     def test_OPTIONS(self):
         with save_globals():
             controller = proxy_server.ContainerController(self.app, 'a', 'c')
@@ -6196,6 +6281,7 @@ class TestContainerController(unittest.TestCase):
                     }
                 }
             controller.container_info = my_container_info_wildcard
+            controller.app.cors_allow_origin = ['', ]
             req = Request.blank(
                 '/v1/a/c/o.jpg',
                 {'REQUEST_METHOD': 'OPTIONS'},
@@ -6467,6 +6553,82 @@ class TestAccountController(unittest.TestCase):
                 self.assertEquals(res.environ['swift.account/a']['status'],
                                   env_expected)
 
+    def test_cors_allowed(self):
+        with save_globals():
+            controller = proxy_server.AccountController(self.app, 'account')
+
+            def my_account_info(*args):
+                return {
+                    'cors': {
+                        'allow_origin': 'https://foo.bar',
+                        'max_age': '999',
+                    }
+                }
+
+            proxy_base.get_account_info = my_account_info
+
+            req = Request.blank('/v1/account', {'Request Method': 'GET'})
+
+            req_origin = 'https://foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertTrue(result)
+            self.assertEquals(cors_info, {'allow_origin': 'https://foo.bar',
+                                          'max_age': '999'})
+
+            req_origin = 'http://no-foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertFalse(result)
+            self.assertEquals(cors_info, {'allow_origin': 'https://foo.bar',
+                                          'max_age': '999'})
+
+            #check merging with cluster configuration without overriding
+            self.app.cors_allow_origin = ['http://cluster.foo.bar', ]
+
+            req_origin = 'https://foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertTrue(result)
+            self.assertEquals(cors_info,
+                              {'allow_origin': 'https://foo.bar \
+http://cluster.foo.bar', 'max_age': '999'})
+
+            req_origin = 'http://no-foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertFalse(result)
+            self.assertEquals(cors_info, {'allow_origin': 'https://foo.bar \
+http://cluster.foo.bar', 'max_age': '999'})
+
+            #check merging with cluster configuration with overriding
+            self.app.cors_allow_origin = ['http://cluster.foo.bar', ]
+            self.app.cors_allow_origin_override = True
+
+            req_origin = 'https://foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertFalse(result)
+            self.assertEquals(cors_info,
+                              {'allow_origin': 'http://cluster.foo.bar',
+                              'max_age': '999'})
+
+            req_origin = 'http://cluster.foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertTrue(result)
+            self.assertEquals(cors_info,
+                              {'allow_origin': 'http://cluster.foo.bar',
+                               'max_age': '999'})
+
+            req_origin = 'http://no-foo.bar'
+            result, cors_info = proxy_base.cors_allowed(controller, self.app,
+                                                        req, req_origin)
+            self.assertFalse(result)
+            self.assertEquals(cors_info, {
+                              'allow_origin': 'http://cluster.foo.bar',
+                              'max_age': '999'})
+
     def test_OPTIONS(self):
         with save_globals():
             self.app.allow_account_management = False
@@ -6507,6 +6669,16 @@ class TestAccountController(unittest.TestCase):
                     verb in resp.headers['Allow'])
             self.assertEquals(len(resp.headers['Allow'].split(', ')), 4)
 
+            #Check behavior with an unauthorized CORS request at account level
+
+            req = Request.blank(
+                '/v1/account', {'REQUEST_METHOD': 'OPTIONS'},
+                headers={'Origin': 'http://foo.bar',
+                         'Access-Control-Request-Method': 'GET'})
+            req.content_length = 0
+            resp = controller.OPTIONS(req)
+            self.assertEquals(401, resp.status_int)
+
             self.app.allow_account_management = True
             controller = proxy_server.AccountController(self.app, 'account')
             req = Request.blank('/v1/account', {'REQUEST_METHOD': 'OPTIONS'})
@@ -6517,6 +6689,14 @@ class TestAccountController(unittest.TestCase):
                 self.assertTrue(
                     verb in resp.headers['Allow'])
             self.assertEquals(len(resp.headers['Allow'].split(', ')), 6)
+
+            req = Request.blank(
+                '/v1/account', {'REQUEST_METHOD': 'OPTIONS'},
+                headers={'Origin': 'http://foo.bar',
+                         'Access-Control-Request-Method': 'GET'})
+            req.content_length = 0
+            resp = controller.OPTIONS(req)
+            self.assertEquals(401, resp.status_int)
 
     def test_GET(self):
         with save_globals():

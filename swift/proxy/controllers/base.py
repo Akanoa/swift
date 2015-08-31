@@ -220,9 +220,7 @@ def cors_allowed(controller, app, req, req_origin):
         # This should only happen for requests to the Account.
         cors_info = cors_info_account.copy()
 
-    if not controller.is_origin_allowed(cors_info, req_origin):
-        return False, cors_info
-    return True, cors_info
+    return controller.is_origin_allowed(cors_info, req_origin)
 
 
 def cors_validation(func):
@@ -1318,12 +1316,18 @@ class Controller(object):
                 [a.strip()
                  for a in cors_info['allow_origin'].split(' ')
                  if a.strip()])
+
         if self.app.cors_allow_origin and \
                 not self.app.cors_allow_origin_override:
             allowed_origins.update(self.app.cors_allow_origin)
         elif self.app.cors_allow_origin_override:
             allowed_origins = set(self.app.cors_allow_origin)
-        return origin in allowed_origins or '*' in allowed_origins
+
+        cors_infos_domains = " ".join([domain for domain in allowed_origins
+                                      if domain])
+        cors_info['allow_origin'] = cors_infos_domains
+        authorized = origin in allowed_origins or '*' in allowed_origins
+        return authorized, cors_info
 
     @public
     def OPTIONS(self, req):
