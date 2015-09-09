@@ -6590,16 +6590,15 @@ class TestAccountController(unittest.TestCase):
             result, cors_info = proxy_base.cors_allowed(controller, self.app,
                                                         req, req_origin)
             self.assertTrue(result)
-            self.assertEquals(cors_info,
-                              {'allow_origin': 'https://foo.bar \
-http://cluster.foo.bar', 'max_age': '999'})
+            self.assertTrue(cors_info['allow_origin'] in ['https://foo.bar\
+ http://cluster.foo.bar', 'http://cluster.foo.bar https://foo.bar'])
 
             req_origin = 'http://no-foo.bar'
             result, cors_info = proxy_base.cors_allowed(controller, self.app,
                                                         req, req_origin)
             self.assertFalse(result)
-            self.assertEquals(cors_info, {'allow_origin': 'https://foo.bar \
-http://cluster.foo.bar', 'max_age': '999'})
+            self.assertTrue(cors_info['allow_origin'] in ['https://foo.bar\
+ http://cluster.foo.bar', 'http://cluster.foo.bar https://foo.bar'])
 
             #check merging with cluster configuration with overriding
             self.app.cors_allow_origin = ['http://cluster.foo.bar', ]
